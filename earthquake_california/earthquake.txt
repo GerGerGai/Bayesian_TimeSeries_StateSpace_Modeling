@@ -1,4 +1,4 @@
-Date       Time              Lat        Lon   Depth   Mag Magt  Nst Gap  Clo  RMS  SRC   Event ID
+Date       Time              Lat        Lon   Depth   Mag Magt  Nst Gap  Clo  RMS  SRC   Event_ID
 -------------------------------------------------------------------------------------------------
 1966/07/01 09:41:21.82  35.94633 -120.47000  11.655  3.20   Mx    7 171   20 0.02 NCSN    1000010 
 1966/07/02 12:08:34.25  35.78667 -120.32650   8.578  3.70   Mx    8  86    3 0.04 NCSN    1000068 
