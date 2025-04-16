@@ -4,7 +4,7 @@ library(ggplot2)
 library(dplyr)
 library(lubridate)
 
-df <- read.csv("../cleaned_earthquake_data.csv")
+df <- read.csv("cleaned_earthquake_data.csv")
 
 # Combine Date and Time into POSIXct datetime
 df$datetime <- as.POSIXct(paste(df$Date, df$Time), format="%Y/%m/%d %H:%M:%OS", tz="UTC")
