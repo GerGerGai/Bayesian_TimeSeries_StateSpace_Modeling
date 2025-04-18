@@ -123,4 +123,5 @@ posterior <- rstan::extract(fit)
 y_rep <- posterior$y_rep
 ppc_dens_overlay(y = stan_data$count, yrep = y_rep[1:100, ])
 
-
+y_pred_ci <- apply(y_rep, 2, quantile, probs = c(0.05, 0.95))
+mean(stan_data$count >= y_pred_ci[1, ] & stan_data$count <= y_pred_ci[2, ])  # coverage rate
