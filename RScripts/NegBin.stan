@@ -17,13 +17,14 @@ data {
 parameters {
   real beta_0, beta_1, beta_2, beta_3, beta_4, beta_5; // coefficients for predicting log mean
   real gamma_0, gamma_1, gamma_2, gamma_3; // coefficients for log dispersion
-  vector[R] u; // random intercepts for each region
+  vector[R] u_raw; // random intercepts for each region
   real<lower=0> sigma_u;// sd of u
 }
 
 transformed parameters {
   vector[N] mu; // mean of NegBin
   vector[N] phi; // dispersion of NegBin
+  vector[R] u = sigma_u*u_raw;
   for (i in 1:N) {
     mu[i] = exp(beta_0 + beta_1 * depth[i] + beta_2 * lat[i] + beta_3 * lon[i] +
                 beta_4 * time[i] + beta_5 * lag_mag[i] + u[region[i]]);
@@ -45,24 +46,24 @@ model {
   gamma_3 ~ normal(0, 10);
   
   sigma_u ~ cauchy(0, 5); // cauchy distribution which has heavy tails and wide spreads.
-  u ~ normal(0, sigma_u);
+  u_raw ~ normal(0, 1);
   
   for (i in 1:N) {
     y[i] ~ neg_binomial_2(mu[i], phi[i]);
   }
 }
+
 generated quantities {
-  int y_rep[N]; // posterior predictive draws
+  int y_rep[N];
   for (i in 1:N) {
-    real safe_mu = fmin(mu[i], 1e6);       // cap mu
-    real safe_phi = fmin(phi[i], 1e6);     // cap phi
-    
-    // Catch and fix bad values
-    if (is_nan(safe_mu) || safe_mu > 1e6 || safe_mu < 0)
-      safe_mu = 1e6;
-    if (is_nan(safe_phi) || safe_phi > 1e6 || safe_phi < 0)
-      safe_phi = 1e6;
-      
+    real safe_mu = mu[i];
+    real safe_phi = phi[i];
+
+    if (is_nan(safe_mu) || safe_mu <= 0 || safe_mu > 1e6)
+      safe_mu = 1e3;
+    if (is_nan(safe_phi) || safe_phi <= 0 || safe_phi > 1e6)
+      safe_phi = 1e3;
+
     y_rep[i] = neg_binomial_2_rng(safe_mu, safe_phi);
   }
 }
