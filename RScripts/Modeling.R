@@ -52,13 +52,23 @@ stan_data <- list(
   clo = agg_df$Clo
 )
 
+init_fn <- function() {
+  list(
+    beta = rep(0, 6),         
+    gamma = rep(0, 3),       
+    sigma_u = 1,
+    u_raw = rnorm(stan_data$R)
+  )
+}
+
 fit <- stan(
   file = "RScripts/NegBin.stan",
   data = stan_data,
   iter = 2000, 
   chains = 4, 
   seed = 42,
-  control = list(adapt_delta = 0.99, max_treedepth = 15)
+  control = list(adapt_delta = 0.99, max_treedepth = 15),
+  init = init_fn
 )
 
 ## Posterior Predictive Checks

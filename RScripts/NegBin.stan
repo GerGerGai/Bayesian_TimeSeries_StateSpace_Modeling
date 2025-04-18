@@ -33,19 +33,19 @@ transformed parameters {
 }
 model {
   
-  beta_0 ~ normal(0, 10); 
-  beta_1 ~ normal(0, 10);
-  beta_2 ~ normal(0, 10); 
-  beta_3 ~ normal(0, 10);
-  beta_4 ~ normal(0, 10); 
-  beta_5 ~ normal(0, 10);
+  beta_0 ~ normal(0, 2); 
+  beta_1 ~ normal(0, 2);
+  beta_2 ~ normal(0, 2); 
+  beta_3 ~ normal(0, 2);
+  beta_4 ~ normal(0, 2); 
+  beta_5 ~ normal(0, 2);
   
-  gamma_0 ~ normal(0, 10); 
-  gamma_1 ~ normal(0, 10);
-  gamma_2 ~ normal(0, 10); 
-  gamma_3 ~ normal(0, 10);
+  gamma_0 ~ normal(0, 2); 
+  gamma_1 ~ normal(0, 2);
+  gamma_2 ~ normal(0, 2); 
+  gamma_3 ~ normal(0, 2);
   
-  sigma_u ~ cauchy(0, 5); // cauchy distribution which has heavy tails and wide spreads.
+  sigma_u ~ cauchy(0, 2); // cauchy distribution which has heavy tails and wide spreads.
   u_raw ~ normal(0, 1);
   
   for (i in 1:N) {
@@ -59,11 +59,12 @@ generated quantities {
     real safe_mu = mu[i];
     real safe_phi = phi[i];
 
-    if (is_nan(safe_mu) || safe_mu <= 0 || safe_mu > 1e6)
-      safe_mu = 1e3;
-    if (is_nan(safe_phi) || safe_phi <= 0 || safe_phi > 1e6)
-      safe_phi = 1e3;
-
-    y_rep[i] = neg_binomial_2_rng(safe_mu, safe_phi);
+    if (!is_nan(safe_mu) && !is_nan(safe_phi) &&
+        safe_mu > 0 && safe_mu < 1e6 &&
+        safe_phi > 0 && safe_phi < 1e6) {
+      y_rep[i] = neg_binomial_2_rng(safe_mu, safe_phi);
+    } else {
+      y_rep[i] = -1;  // invalid
+    }
   }
 }
