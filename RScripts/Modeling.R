@@ -7,11 +7,15 @@ library(tidyr)
 df <- read.csv("cleaned_earthquake_data.csv")
 df$datetime <- as.POSIXct(paste(df$Date, df$Time), format="%Y/%m/%d %H:%M:%OS", tz="UTC") # combine dates and times
 
+region_size <- 2
+
 df <- df %>%
   filter(!is.na(datetime) & Mag >= 4) %>%
   mutate(
     month = floor_date(datetime, "month"), # convert to month level
-    region = paste0("Lat", floor(Lat), "_Lon", floor(Lon)) # define grid regions of 1°x1°
+    region_lat = floor(Lat / region_size),
+    region_lon = floor(Lon / region_size),
+    region = paste0("Lat", region_lat, "_Lon", region_lon) # define grid regions of 1°x1°
   )
 
 agg_df <- df %>%
