@@ -2,6 +2,7 @@ library(dplyr)
 library(lubridate)
 library(rstan)
 library(tidyr)
+library(bayesplot)
 #install.packages("V8")
 
 
@@ -113,15 +114,13 @@ fit <- stan(
   init = "random"
 )
 
-posterior <- rstan::extract(fit)
-y_rep <- posterior$y_rep
-
-y_rep
-
-hist(agg_df$Count, breaks = 30, col = rgb(0, 0, 1, 0.5),
-     main = "Posterior Predictive Check", xlab = "Earthquake Counts")
-lines(density(y_rep[1,]), col = "red")
-
+# check mixing/convergence:
 print(fit)
 summary(fit)$summary
-traceplot(fit, pars = c("alpha", "beta_time", "phi"))
+
+# check fitness of the model: the result seems good, though not perfect
+posterior <- rstan::extract(fit)
+y_rep <- posterior$y_rep
+ppc_dens_overlay(y = stan_data$count, yrep = y_rep[1:100, ])
+
+
