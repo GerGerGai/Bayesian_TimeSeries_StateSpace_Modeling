@@ -1,70 +1,95 @@
 data {
-  int<lower=0> N; // number of (month, region) groups
-  int<lower=0> R; // number of unique regions
-  int<lower=1, upper=R> region[N]; // region ID for each row (from 1 to R)
-  int<lower=0> y[N]; // observed earthquake counts with magnitude >= 4
+  int<lower=1> N;                    // number of observations
+  int<lower=1> R;                    // number of regions
+  int<lower=1, upper=R> region[N];   // region ID for each observation
+  int<lower=0> count[N];             // response variable
+
+  vector[N] time;        // continuous time index
   vector[N] depth;
   vector[N] lat;
   vector[N] lon;
-  vector[N] time;
   vector[N] lag_mag;
   vector[N] nst;
   vector[N] rms;
   vector[N] clo;
 }
 
-
 parameters {
-  real beta_0, beta_1, beta_2, beta_3, beta_4, beta_5; // coefficients for predicting log mean
-  real gamma_0, gamma_1, gamma_2, gamma_3; // coefficients for log dispersion
-  vector[R] u_raw; // random intercepts for each region
-  real<lower=0> sigma_u;// sd of u
+  vector[R] alpha;
+  vector[R] beta_time;
+  vector[R] beta_sin;
+  vector[R] beta_cos;
+
+  real theta_depth;
+  real theta_lat;
+  real theta_lon;
+  real theta_lagmag;
+
+  vector[3] gamma;  // nst, rms, clo
+
+  real<lower=0> phi_base;  // baseline overdispersion
 }
 
 transformed parameters {
-  vector[N] mu; // mean of NegBin
-  vector[N] phi; // dispersion of NegBin
-  vector[R] u = sigma_u*u_raw;
+  vector[N] mu;
+  vector[N] phi;
+
   for (i in 1:N) {
-    mu[i] = exp(beta_0 + beta_1 * depth[i] + beta_2 * lat[i] + beta_3 * lon[i] +
-                beta_4 * time[i] + beta_5 * lag_mag[i] + u[region[i]]);
-    phi[i] = exp(gamma_0 + gamma_1 * nst[i] + gamma_2 * rms[i] + gamma_3 * clo[i]);
+    real season_sin = sin(2 * pi() * time[i] / 12);
+    real season_cos = cos(2 * pi() * time[i] / 12);
+
+    mu[i] = exp(
+      alpha[region[i]] +
+      beta_time[region[i]] * time[i] +
+      beta_sin[region[i]] * season_sin +
+      beta_cos[region[i]] * season_cos +
+      theta_depth * depth[i] +
+      theta_lat   * lat[i] +
+      theta_lon   * lon[i] +
+      theta_lagmag * lag_mag[i]
+    );
+
+    // Safety net
+    if (is_nan(mu[i]) || mu[i] <= 0 || mu[i] > positive_infinity())
+      mu[i] = 1e-3;
+
+    phi[i] = exp(
+      log(phi_base) +
+      gamma[1] * nst[i] +
+      gamma[2] * rms[i] +
+      gamma[3] * clo[i]
+    );
   }
 }
+
 model {
-  
-  beta_0 ~ normal(0, 2); 
-  beta_1 ~ normal(0, 2);
-  beta_2 ~ normal(0, 2); 
-  beta_3 ~ normal(0, 2);
-  beta_4 ~ normal(0, 2); 
-  beta_5 ~ normal(0, 2);
-  
-  gamma_0 ~ normal(0, 2); 
-  gamma_1 ~ normal(0, 2);
-  gamma_2 ~ normal(0, 2); 
-  gamma_3 ~ normal(0, 2);
-  
-  sigma_u ~ cauchy(0, 2); // cauchy distribution which has heavy tails and wide spreads.
-  u_raw ~ normal(0, 1);
-  
-  for (i in 1:N) {
-    y[i] ~ neg_binomial_2(mu[i], phi[i]);
-  }
+  // Priors
+  alpha ~ normal(0, 2);
+  beta_time ~ normal(0, 1);
+  beta_sin ~ normal(0, 1);
+  beta_cos ~ normal(0, 1);
+
+  theta_depth ~ normal(0, 1);
+  theta_lat ~ normal(0, 1);
+  theta_lon ~ normal(0, 1);
+  theta_lagmag ~ normal(0, 1);
+
+  gamma ~ normal(0, 1);
+  phi_base ~ exponential(1);
+
+  // Likelihood
+  count ~ neg_binomial_2(mu, phi);
 }
 
 generated quantities {
   int y_rep[N];
-  for (i in 1:N) {
-    real safe_mu = mu[i];
-    real safe_phi = phi[i];
 
-    if (!is_nan(safe_mu) && !is_nan(safe_phi) &&
-        safe_mu > 0 && safe_mu < 1e6 &&
-        safe_phi > 0 && safe_phi < 1e6) {
-      y_rep[i] = neg_binomial_2_rng(safe_mu, safe_phi);
+  for (i in 1:N) {
+    if (is_nan(mu[i]) || mu[i] <= 0 || mu[i] > positive_infinity() ||
+        is_nan(phi[i]) || phi[i] <= 0 || phi[i] > positive_infinity()) {
+      y_rep[i] = -1;  // invalid prediction
     } else {
-      y_rep[i] = -1;  // invalid
+      y_rep[i] = neg_binomial_2_rng(mu[i], phi[i]);
     }
   }
 }
