@@ -121,3 +121,7 @@ y_rep
 hist(agg_df$Count, breaks = 30, col = rgb(0, 0, 1, 0.5),
      main = "Posterior Predictive Check", xlab = "Earthquake Counts")
 lines(density(y_rep[1,]), col = "red")
+
+print(fit)
+summary(fit)$summary
+traceplot(fit, pars = c("alpha", "beta_time", "phi"))
