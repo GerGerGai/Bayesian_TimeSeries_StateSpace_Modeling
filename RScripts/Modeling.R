@@ -109,6 +109,8 @@ init_fn <- function() {
   )
 }
 
+options(mc.cores = 2)
+
 fit <- stan(
   file = "RScripts/NegBin.stan",
   data = stan_data,
@@ -120,7 +122,7 @@ fit <- stan(
 )
 
 # save the model to disk first:
-saveRDS(fit, file = "trained_model_advanced.rds")
+saveRDS(fit, file = "trained_model_tail.rds")
 # to read: fit <- readRDS("trained_model.rds")
 
 # check mixing/convergence:
@@ -130,7 +132,7 @@ summary(fit)$summary
 # check fitness of the model: the result seems good, though not perfect
 posterior <- rstan::extract(fit)
 y_rep <- posterior$y_rep
-ppc_dens_overlay(y = stan_data$count, yrep = y_rep[1:200, ])
+ppc_dens_overlay(y = stan_data$count, yrep = y_rep[1:100, ])
 
 y_pred_ci <- apply(y_rep, 2, quantile, probs = c(0.05, 0.95))
 mean(stan_data$count >= y_pred_ci[1, ] & stan_data$count <= y_pred_ci[2, ])  

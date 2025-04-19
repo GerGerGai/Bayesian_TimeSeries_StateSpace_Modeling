@@ -15,15 +15,21 @@ data {
 }
 
 parameters {
+  // region-level intercepts and time/seasonality effects
   vector[R] alpha;
   vector[R] beta_time;
   vector[R] beta_sin;
   vector[R] beta_cos;
 
+  // shared coefficients
   real theta_depth;
   real theta_lat;
   real theta_lon;
   real theta_lagmag;
+
+  // NEW: separate tail covariates
+  real theta_depth_tail;
+  real theta_lagmag_tail;
 
   vector[3] gamma;
 
@@ -31,6 +37,9 @@ parameters {
   real<lower=0> phi2;
 
   real<lower=0, upper=1> mix_weight;
+
+  // NEW: learnable tail shift
+  real<lower=0> tail_shift;
 }
 
 transformed parameters {
@@ -43,20 +52,28 @@ transformed parameters {
     real season_sin = sin(2 * pi() * time[i] / 12);
     real season_cos = cos(2 * pi() * time[i] / 12);
 
-    real linpred = alpha[region[i]] +
-                   beta_time[region[i]] * time[i] +
-                   beta_sin[region[i]] * season_sin +
-                   beta_cos[region[i]] * season_cos +
-                   theta_depth * depth[i] +
-                   theta_lat   * lat[i] +
-                   theta_lon   * lon[i] +
-                   theta_lagmag * lag_mag[i];
+    // shared linear predictor
+    real eta = alpha[region[i]] +
+               beta_time[region[i]] * time[i] +
+               beta_sin[region[i]] * season_sin +
+               beta_cos[region[i]] * season_cos +
+               theta_depth * depth[i] +
+               theta_lat   * lat[i] +
+               theta_lon   * lon[i] +
+               theta_lagmag * lag_mag[i];
 
-    mu1[i] = exp(linpred);
-    mu2[i] = exp(linpred + 0.75);  // heavier tail by boosting the mean
+    mu1[i] = exp(eta);
 
-    phi1_vec[i] = exp(gamma[1] * nst[i] + gamma[2] * rms[i] + gamma[3] * clo[i]) * phi1;
-    phi2_vec[i] = exp(gamma[1] * nst[i] + gamma[2] * rms[i] + gamma[3] * clo[i]) * phi2;
+    // tail-specific extension
+    real eta_tail = eta +
+                    theta_depth_tail * depth[i] +
+                    theta_lagmag_tail * lag_mag[i];
+
+    mu2[i] = exp(eta_tail + tail_shift);  // stronger tail
+
+    real log_phi = gamma[1] * nst[i] + gamma[2] * rms[i] + gamma[3] * clo[i];
+    phi1_vec[i] = exp(log_phi) * phi1;
+    phi2_vec[i] = exp(log_phi) * phi2;
   }
 }
 
@@ -72,17 +89,20 @@ model {
   theta_lon ~ normal(0, 1);
   theta_lagmag ~ normal(0, 1);
 
+  theta_depth_tail ~ normal(0, 1);
+  theta_lagmag_tail ~ normal(0, 1);
+
+  tail_shift ~ normal(1.5, 0.5);  // adaptively learns how extreme the tail can be
+
   gamma ~ normal(0, 1);
   phi1 ~ exponential(1);
   phi2 ~ exponential(1);
-  mix_weight ~ beta(2, 2);  // mildly regularized
+  mix_weight ~ beta(2, 2);
 
-  // Likelihood: mixture of NB1 and NB2
   for (i in 1:N) {
     target += log_mix(mix_weight,
       neg_binomial_2_lpmf(count[i] | mu1[i], phi1_vec[i]),
-      neg_binomial_2_lpmf(count[i] | mu2[i], phi2_vec[i])
-    );
+      neg_binomial_2_lpmf(count[i] | mu2[i], phi2_vec[i]));
   }
 }
 
