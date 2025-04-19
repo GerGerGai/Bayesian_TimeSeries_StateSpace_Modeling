@@ -5,6 +5,7 @@ library(tidyr)
 library(bayesplot)
 library(scoringRules)
 library(posterior)   
+library(ggplot2)
 #install.packages("V8")
 
 
@@ -87,16 +88,20 @@ fit1 <- stan(
 )
 
 ########  model1 posterior check:
+fit1
 
 # 0. fast slow mixing:
 mcmc_trace(fit1, pars = "alpha") 
 mcmc_trace(fit1, pars = "phi_raw") 
 mcmc_trace(fit1, pars = "sigma")
+mcmc_trace(fit1, pars = c("alpha", "phi_raw", "sigma"),
+           facet_args = list(nrow = 1)) 
 
 
 # 1. convergence: Rhat and neff
 # aim: Rhat<1.01, >400
 summ = summary(fit1)$summary
+summ
 bad_rhat = sum(summ[,"Rhat"] > 1.01)
 bad_neff  =  sum(summ[,"n_eff"] < 400)
 
@@ -127,14 +132,9 @@ bayesplot::mcmc_acf(draws_arr, pars = "alpha", lags = 30)
 # 4. posterior‑predictive fit 
 posterior <- rstan::extract(fit1)
 y_rep <- posterior$y_rep
-ppc_dens_overlay(y = stan_data_1$count, yrep = y_rep[1:200, ])
+ppc_dens_overlay(y = stan_data_1$count, yrep = y_rep[sample(4000, 200), ])
+stan_data_1$count
 
-
-## marginal distribution check
-ppc_dens_overlay(
-  y    = stan_data_1$count,          # observed counts
-  yrep = y_rep[sample(4000, 200), ] # 200 random draws; keep it legible
-)
 
 ## For discrete data ➡ better: rootogram
 ppc_rootogram(
@@ -149,7 +149,7 @@ ppc_stat(y = stan_data_1$count, yrep = y_rep, stat = "mean")
 #7. credible interval
 # too conservative?
 y_pred_ci <- apply(y_rep, 2, quantile, probs = c(0.025, 0.975))
-mean(stan_data_1$count >= y_pred_ci[1, ] & stan_data_1$count <= y_pred_ci[2, ])  # coverage rate
+mean(stan_data_1$count >= y_pred_ci[1, ] & stan_data_1$count <= y_pred_ci[2, ]) 
 
 
 
@@ -167,21 +167,18 @@ mae  <- function(mat, obs) {
 }
 
 metrics <- tibble(
-  model = c("Poisson‑SSM", "NegBin‑Region"),
-  RMSE  = c(rmse(fc_pois, y_test), 0), #stub for model2's prediction
-  MAE   = c(mae(fc_pois, y_test), 0)
+  model = c("Poisson‑SSM"),
+  RMSE  = c(rmse(fc_pois, y_test)), #stub for model2's prediction
+  MAE   = c(mae(fc_pois, y_test))
 )
 
 
-crps_pois <- mean(crps_sample(y_test, t(fc_pois)))
-crps_nb   <- 1
 logs_pois <- mean(logs_sample(y_test, t(fc_pois)))
 logs_nb   <- 1
 
 metrics <- metrics |>
   mutate(
-    CRPS = c(crps_pois, crps_nb),
-    LogS = c(logs_pois, logs_nb)
+    LogS = c(logs_pois)
   )
 
 print(metrics)
@@ -190,7 +187,35 @@ pi95_pois <- mean(
   y_test >= apply(fc_pois, 2, quantile, 0.025) &
     y_test <= apply(fc_pois, 2, quantile, 0.975)
 )
+pi95_pois
 
+y_test
+ci_limits_fore = apply(fc_pois, 2, quantile, c(0.025, 0.975))
+ci_limits_fore[1,]
+
+inside_ci =  y_test >= ci_limits_fore[1,] & y_test <= ci_limits_fore[2,]
+
+tmpdf = data.frame(
+  x = 1:H,
+  y = y_test,
+  ymin = ci_limits_fore[1, ],
+  ymax = ci_limits_fore[2, ],
+  inside_ci = inside_ci
+)
+
+ggplot(tmpdf, aes(x = x, y = y,ymin = ymin, ymax = ymax,color = inside_ci)) +
+  geom_point() + 
+  geom_errorbar() +
+  theme_minimal() +
+  scale_x_continuous(
+    breaks = 1:12,  
+    labels = 1:12   
+  ) +
+  ggtitle("Observed Counts, and 95% Prediction Credible Intervals (Poisson Model)") +
+  labs(x = "h", y = "Earthquake Count")
+
+
+rstan::extract(fit1, pars = "y_fore")$y_fore
 
 ####### END OF model 1: Poisson model ######################
 ###########################################################################
@@ -209,4 +234,3 @@ pi95_pois <- mean(
 ###########################################################################
 
 
-agg_df
