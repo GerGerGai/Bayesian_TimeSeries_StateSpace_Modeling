@@ -1,10 +1,10 @@
 data {
-  int<lower=1> N;                    // number of observations
-  int<lower=1> R;                    // number of regions
-  int<lower=1, upper=R> region[N];   // region ID for each observation
-  int<lower=0> count[N];             // response variable
+  int<lower=1> N;
+  int<lower=1> R;
+  int<lower=1, upper=R> region[N];
+  int<lower=0> count[N];
 
-  vector[N] time;        // continuous time index
+  vector[N] time;
   vector[N] depth;
   vector[N] lat;
   vector[N] lon;
@@ -25,46 +25,44 @@ parameters {
   real theta_lon;
   real theta_lagmag;
 
-  vector[3] gamma;  // nst, rms, clo
+  vector[3] gamma;
 
-  real<lower=0> phi_base;  // baseline overdispersion
+  real<lower=0> phi1;
+  real<lower=0> phi2;
+
+  real<lower=0, upper=1> mix_weight;
 }
 
 transformed parameters {
-  vector[N] mu;
-  vector[N] phi;
+  vector[N] mu1;
+  vector[N] mu2;
+  vector[N] phi1_vec;
+  vector[N] phi2_vec;
 
   for (i in 1:N) {
     real season_sin = sin(2 * pi() * time[i] / 12);
     real season_cos = cos(2 * pi() * time[i] / 12);
 
-    mu[i] = exp(
-      alpha[region[i]] +
-      beta_time[region[i]] * time[i] +
-      beta_sin[region[i]] * season_sin +
-      beta_cos[region[i]] * season_cos +
-      theta_depth * depth[i] +
-      theta_lat   * lat[i] +
-      theta_lon   * lon[i] +
-      theta_lagmag * lag_mag[i]
-    );
+    real linpred = alpha[region[i]] +
+                   beta_time[region[i]] * time[i] +
+                   beta_sin[region[i]] * season_sin +
+                   beta_cos[region[i]] * season_cos +
+                   theta_depth * depth[i] +
+                   theta_lat   * lat[i] +
+                   theta_lon   * lon[i] +
+                   theta_lagmag * lag_mag[i];
 
-    // Safety net
-    if (is_nan(mu[i]) || mu[i] <= 0 || mu[i] > positive_infinity())
-      mu[i] = 1e-3;
+    mu1[i] = exp(linpred);
+    mu2[i] = exp(linpred + 0.75);  // heavier tail by boosting the mean
 
-    phi[i] = exp(
-      log(phi_base) +
-      gamma[1] * nst[i] +
-      gamma[2] * rms[i] +
-      gamma[3] * clo[i]
-    );
+    phi1_vec[i] = exp(gamma[1] * nst[i] + gamma[2] * rms[i] + gamma[3] * clo[i]) * phi1;
+    phi2_vec[i] = exp(gamma[1] * nst[i] + gamma[2] * rms[i] + gamma[3] * clo[i]) * phi2;
   }
 }
 
 model {
   // Priors
-  alpha ~ normal(0, 2);
+  alpha ~ normal(0, 1);
   beta_time ~ normal(0, 1);
   beta_sin ~ normal(0, 1);
   beta_cos ~ normal(0, 1);
@@ -75,21 +73,27 @@ model {
   theta_lagmag ~ normal(0, 1);
 
   gamma ~ normal(0, 1);
-  phi_base ~ exponential(1);
+  phi1 ~ exponential(1);
+  phi2 ~ exponential(1);
+  mix_weight ~ beta(2, 2);  // mildly regularized
 
-  // Likelihood
-  count ~ neg_binomial_2(mu, phi);
+  // Likelihood: mixture of NB1 and NB2
+  for (i in 1:N) {
+    target += log_mix(mix_weight,
+      neg_binomial_2_lpmf(count[i] | mu1[i], phi1_vec[i]),
+      neg_binomial_2_lpmf(count[i] | mu2[i], phi2_vec[i])
+    );
+  }
 }
 
 generated quantities {
   int y_rep[N];
 
   for (i in 1:N) {
-    if (is_nan(mu[i]) || mu[i] <= 0 || mu[i] > positive_infinity() ||
-        is_nan(phi[i]) || phi[i] <= 0 || phi[i] > positive_infinity()) {
-      y_rep[i] = -1;  // invalid prediction
-    } else {
-      y_rep[i] = neg_binomial_2_rng(mu[i], phi[i]);
-    }
+    real component = bernoulli_rng(mix_weight);
+    if (component == 1)
+      y_rep[i] = neg_binomial_2_rng(mu1[i], phi1_vec[i]);
+    else
+      y_rep[i] = neg_binomial_2_rng(mu2[i], phi2_vec[i]);
   }
 }
