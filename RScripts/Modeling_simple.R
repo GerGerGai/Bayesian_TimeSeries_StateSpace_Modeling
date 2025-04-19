@@ -3,6 +3,8 @@ library(lubridate)
 library(rstan)
 library(tidyr)
 library(bayesplot)
+library(scoringRules)
+library(posterior)   
 #install.packages("V8")
 
 
@@ -20,13 +22,6 @@ df <- df %>%
 
 
 
-# Time index as continuous covariate (in months since first quake)
-origin_time <- min(df$datetime)
-df$TimeIndex <- as.numeric(difftime(df$datetime, origin_time, units = "days")) / 30
-
-
-
-
 agg_df <- df %>%
   mutate(month = floor_date(datetime, "month")) %>%
   group_by(month) %>%
@@ -34,25 +29,35 @@ agg_df <- df %>%
     Count = n(),
     Depth = mean(Depth, na.rm = TRUE),
     LagMag = mean(LagMag, na.rm = TRUE),
-    TimeIndex = mean(TimeIndex, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   drop_na()
 
 agg_df <- agg_df %>%
-  mutate(across(c(Depth, LagMag, TimeIndex), scale)) %>%
+  mutate(across(c(Depth, LagMag), scale)) %>%
   mutate(across(everything(), ~ifelse(is.finite(.), ., 1e-3)))
+
+
+
 
 
 ###########################################################################
 ####### SECTION: model 1: Poisson model ######################
 
+H = 12 # forecast horizon
+N_total = nrow(agg_df)
+N_train = N_total - H
+
+
 stan_data_1 <- list(
-  N = nrow(agg_df),
-  count = agg_df$Count,
-  time = as.vector(agg_df$TimeIndex),
-  depth = as.vector(agg_df$Depth),
-  lag_mag = as.vector(agg_df$LagMag)
+  N = N_train,
+  count = agg_df$Count[1:N_train],
+  depth = as.vector(agg_df$Depth)[1:N_train],
+  lag_mag = as.vector(agg_df$LagMag)[1:N_train],
+  
+  H = H,
+  depth_future = as.vector(agg_df$Depth)[(N_train+1):N_total],
+  lag_mag_future = as.vector(agg_df$Depth)[(N_train+1):N_total]
 )
 
 
@@ -143,9 +148,48 @@ ppc_stat(y = stan_data_1$count, yrep = y_rep, stat = "mean")
 
 #7. credible interval
 # too conservative?
-y_pred_ci <- apply(y_rep, 2, quantile, probs = c(0.05, 0.95))
+y_pred_ci <- apply(y_rep, 2, quantile, probs = c(0.025, 0.975))
 mean(stan_data_1$count >= y_pred_ci[1, ] & stan_data_1$count <= y_pred_ci[2, ])  # coverage rate
 
+
+
+########  model1 forecasting check:
+y_test = agg_df$Count[(N_train + 1):N_total]
+y_test
+
+fc_pois <- as_draws_matrix(rstan::extract(fit1, pars = "y_fore")$y_fore)
+
+rmse <- function(mat, obs) {
+  sqrt( mean( (colMeans(mat) - obs)^2 ) )
+}
+mae  <- function(mat, obs) {
+  mean( abs(colMeans(mat) - obs) )
+}
+
+metrics <- tibble(
+  model = c("Poisson‑SSM", "NegBin‑Region"),
+  RMSE  = c(rmse(fc_pois, y_test), 0), #stub for model2's prediction
+  MAE   = c(mae(fc_pois, y_test), 0)
+)
+
+
+crps_pois <- mean(crps_sample(y_test, t(fc_pois)))
+crps_nb   <- 1
+logs_pois <- mean(logs_sample(y_test, t(fc_pois)))
+logs_nb   <- 1
+
+metrics <- metrics |>
+  mutate(
+    CRPS = c(crps_pois, crps_nb),
+    LogS = c(logs_pois, logs_nb)
+  )
+
+print(metrics)
+
+pi95_pois <- mean(
+  y_test >= apply(fc_pois, 2, quantile, 0.025) &
+    y_test <= apply(fc_pois, 2, quantile, 0.975)
+)
 
 
 ####### END OF model 1: Poisson model ######################

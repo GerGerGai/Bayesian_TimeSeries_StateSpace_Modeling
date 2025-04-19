@@ -1,11 +1,13 @@
 data {
-  int<lower=1> N;                    // number of observations
-  int<lower=0> count[N];             // response variable
+  int<lower=1> N;           // number of observations
+  int<lower=0> count[N];    // response variable
 
-  vector[N] time;        // continuous time index
   vector[N] depth;
-
   vector[N] lag_mag;
+  
+  int<lower=1> H;            // forecast horizon
+  vector[H] depth_future;
+  vector[H] lag_mag_future;
 }
 
 parameters {
@@ -44,10 +46,27 @@ model {
 }
 
 generated quantities {
+  //for posterior predictive checking
   int y_rep[N];
 
    for (t in 1:N)
     y_rep[t] = poisson_log_rng(log_lambda[t] +
                                theta_depth  * depth[t] +
                                theta_lagmag * lag_mag[t]);
+                               
+  //for forecasting
+  vector[H] log_lambda_fore;     // latent states
+  int y_fore[H];                 // predictions
+  real logl_prev = log_lambda[N];
+  
+  for (h in 1:H) {
+    logl_prev = alpha + phi * (logl_prev - alpha)
+                      + sigma * normal_rng(0, 1);
+    log_lambda_fore[h] = logl_prev;
+    y_fore[h] = poisson_log_rng(
+                  logl_prev
+                  + theta_depth  * depth_future[h]
+                  + theta_lagmag * lag_mag_future[h]);
+  }
+  
 }
