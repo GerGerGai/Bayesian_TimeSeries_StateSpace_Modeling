@@ -1,6 +1,11 @@
 # Bayesian_TimeSeries_StateSpace_Modeling
 
-# Proposal
+- Please find our report in `final report.pdf`
+- R scripts and stan code can be found in `RScripts` folder
+- we cleaned the data in `cleaned_earthquake_data.csv`
+
+
+# Below are our Proposal
 Project Proposal
 
 ## Team: 
