@@ -3,7 +3,9 @@ library(lubridate)
 library(rstan)
 library(tidyr)
 library(bayesplot)
+library(scoringRules)
 #install.packages("V8")
+# install.packages("scoringRules")
 
 
 ## Data Preparation
@@ -132,7 +134,18 @@ summary(fit)$summary
 # check fitness of the model: the result seems good, though not perfect
 posterior <- rstan::extract(fit)
 y_rep <- posterior$y_rep
-ppc_dens_overlay(y = stan_data$count, yrep = y_rep[1:100, ])
+ppc_dens_overlay(y = stan_data$count, yrep = y_rep[1:300, ])
+
+# trace plots for main parameters
+posterior_array <- as.array(fit)
+mcmc_trace(posterior_array, pars = c(
+  "alpha[1]", 
+  "beta_time[1]", 
+  "beta_sin[1]", 
+  "mu[2]", 
+  "gamma[2]",
+  "theta_depth"
+))
 
 y_pred_ci <- apply(y_rep, 2, quantile, probs = c(0.05, 0.95))
 mean(stan_data$count >= y_pred_ci[1, ] & stan_data$count <= y_pred_ci[2, ])  
@@ -195,3 +208,9 @@ coverage <- mean(agg_test$Count >= y_lower & agg_test$Count <= y_upper)
 
 cat("Test RMSE:", round(rmse, 2), "\n")
 cat("95% Coverage:", round(coverage * 100, 2), "%\n")
+
+mae <- mean(abs(y_pred_mean - agg_test$Count))
+logS <- mean(logs_sample(agg_test$Count, t(y_rep_test)))
+
+cat("Test MAE:", round(mae, 2), "\n")
+cat("Test logS:", round(logS, 3), "\n")
