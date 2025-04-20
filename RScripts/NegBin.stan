@@ -24,7 +24,7 @@ parameters {
   real theta_lon;
   real theta_lagmag;
 
-  vector[3] gamma;     // for nst, rms, clo
+  vector[3] gamma;     
   real<lower=0> phi_base;
 }
 
@@ -63,8 +63,8 @@ model {
   theta_lon   ~ normal(0, 2);
   theta_lagmag ~ normal(0, 2);
 
-  gamma ~ normal(0, 0.5);      // regularized dispersion
-  phi_base ~ exponential(1);  // base level of dispersion
+  gamma ~ normal(0, 0.5);      
+  phi_base ~ exponential(1); 
 
   for (i in 1:N)
     count[i] ~ neg_binomial_2(mu[i], phi[i]);
