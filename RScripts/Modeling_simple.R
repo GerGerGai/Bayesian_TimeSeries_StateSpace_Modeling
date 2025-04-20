@@ -15,24 +15,23 @@ df$datetime <- as.POSIXct(paste(df$Date, df$Time), format="%Y/%m/%d %H:%M:%OS", 
 
 
 df <- df %>%
-  filter(!is.na(datetime) & Mag >= 3.5) 
+  filter(!is.na(datetime)) 
 
 df <- df %>%
   mutate(LagMag = lag(Mag)) %>%
   ungroup()
 
-
-
 agg_df <- df %>%
   mutate(month = floor_date(datetime, "month")) %>%
   group_by(month) %>%
   summarise(
-    Count = n(),
+    Count = sum(Mag >= 4, na.rm = TRUE),
     Depth = mean(Depth, na.rm = TRUE),
     LagMag = mean(LagMag, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   drop_na()
+
 
 agg_df <- agg_df %>%
   mutate(across(c(Depth, LagMag), scale)) %>%
@@ -76,6 +75,7 @@ init_fn_1 <- function() {
     
   )
 }
+set.seed(447)
 
 fit1 <- stan(
   file = "RScripts/Poisson_simple.stan",
@@ -190,9 +190,12 @@ pi95_pois <- mean(
 pi95_pois
 
 y_test
+apply(fc_pois, 2, quantile, c(0.025, 0.5,  0.975))
+
 ci_limits_fore = apply(fc_pois, 2, quantile, c(0.025, 0.975))
 ci_limits_fore[1,]
-
+      
+      
 inside_ci =  y_test >= ci_limits_fore[1,] & y_test <= ci_limits_fore[2,]
 
 tmpdf = data.frame(
@@ -203,6 +206,7 @@ tmpdf = data.frame(
   inside_ci = inside_ci
 )
 
+#code referencing ex8's plot
 ggplot(tmpdf, aes(x = x, y = y,ymin = ymin, ymax = ymax,color = inside_ci)) +
   geom_point() + 
   geom_errorbar() +
