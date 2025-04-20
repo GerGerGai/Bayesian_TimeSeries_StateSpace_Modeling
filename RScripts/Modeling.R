@@ -109,15 +109,15 @@ init_fn <- function() {
   )
 }
 
-options(mc.cores = 2)
+options(mc.cores = 4)
 
 fit <- stan(
   file = "RScripts/NegBin.stan",
   data = stan_data,
-  iter = 2000,
+  iter = 1000,
   chains = 4,
   seed = 42,
-  control = list(adapt_delta = 0.99, max_treedepth = 15),
+  control = list(adapt_delta = 0.95, max_treedepth = 15),
   init = "random"
 )
 
