@@ -117,12 +117,12 @@ fit <- stan(
   iter = 1000,
   chains = 4,
   seed = 42,
-  control = list(adapt_delta = 0.95, max_treedepth = 15),
+  control = list(adapt_delta = 0.99, max_treedepth = 15),
   init = "random"
 )
 
 # save the model to disk first:
-saveRDS(fit, file = "trained_model_tail.rds")
+saveRDS(fit, file = "trained_model_tail_improve2_good?.rds")
 # to read: fit <- readRDS("trained_model.rds")
 
 # check mixing/convergence:
@@ -146,7 +146,7 @@ resid <- stan_data$count - y_pred_mean
 plot(resid, main = "Residuals", ylab = "Observed - Predicted")
 abline(h = 0, col = "red", lty = 2)
 
-region_test <- as.integer(factor(agg_test$region))  
+region_test <- as.integer(factor(agg_test$region))
 time_test   <- agg_test$TimeIndex
 depth_test  <- agg_test$Depth
 lat_test    <- agg_test$Lat
@@ -176,7 +176,7 @@ for (d in 1:n_draws) {
     posterior$gamma[d, 1] * nst_test +
       posterior$gamma[d, 2] * rms_test +
       posterior$gamma[d, 3] * clo_test
-  )
+  ) * posterior$phi_base[d]
   
   y_rep_test[d, ] <- rnbinom(n_test, size = phi, mu = mu)
 }
@@ -189,13 +189,9 @@ plot(y_pred_mean, agg_test$Count,
 abline(0, 1, col = "red")
 
 rmse <- sqrt(mean((y_pred_mean - agg_test$Count)^2))
-
 y_lower <- apply(y_rep_test, 2, quantile, probs = 0.025)
 y_upper <- apply(y_rep_test, 2, quantile, probs = 0.975)
 coverage <- mean(agg_test$Count >= y_lower & agg_test$Count <= y_upper)
 
 cat("Test RMSE:", round(rmse, 2), "\n")
 cat("95% Coverage:", round(coverage * 100, 2), "%\n")
-
-
-
